@@ -79,7 +79,7 @@ header p { margin: 0; font-size: 0.9rem; opacity: 0.85; max-width: 620px; margin
 .explicacion b { color: var(--acento); }
 .sin-resultados { text-align: center; color: var(--gris); padding: 30px 0; font-size: 0.9rem; }
 footer { text-align: center; font-size: 0.75rem; color: var(--gris); padding: 20px 16px 30px; }
-  header { position: relative; }
+header { position: relative; }
 html.dark {
   --oscuro: #0a1015;
   --medio: #6b8fae;
@@ -109,6 +109,28 @@ html.dark header { background: #050a0f; }
   z-index: 10;
 }
 .btn-top.visible { opacity: 1; pointer-events: auto; }
+.filtro-sancion { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.chip {
+  padding: 5px 11px; border-radius: 14px; border: 1px solid var(--borde);
+  background: var(--card); font-size: 0.72rem; cursor: pointer;
+  color: var(--gris); font-weight: 600;
+}
+.chip.activo { background: var(--acento); color: #fff; border-color: var(--acento); }
+.articulo { position: relative; }
+.btn-compartir {
+  position: absolute; top: 12px; right: 12px;
+  background: transparent; border: 1px solid var(--borde);
+  width: 30px; height: 30px; border-radius: 50%;
+  cursor: pointer; font-size: 0.85rem; color: var(--gris);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.btn-compartir:hover { background: var(--fondo); color: var(--oscuro); }
+mark {
+  background: #fef08a; color: inherit; padding: 0 2px;
+  border-radius: 2px;
+}
+html.dark mark { background: #b5813a; color: #fff; }
 </style>
 </head>
 <body>
@@ -124,6 +146,7 @@ html.dark header { background: #050a0f; }
     <input type="text" id="buscar" aria-label="Buscar contravención"
       placeholder="Buscar contravención: ruido, alcohol, pelea, animales, basura, 911, discriminación, bullying...">
     <div class="tabs" id="tabs" role="tablist" aria-label="Filtrar por libro"></div>
+    <div class="filtro-sancion" id="filtro-sancion" role="group" aria-label="Filtrar por tipo de sanción"></div>
     <p class="contador" id="contador"></p>
     <p class="contador">La búsqueda entiende palabras relacionadas, frases cotidianas y pequeños errores de escritura; no distingue mayúsculas ni acentos.</p>
   </div>
@@ -140,13 +163,17 @@ const datos = [{"numero":"1","texto":"Ambito de aplicació","libro":"Libro I —
 
 const libros = ["Todos", "Libro I — Parte General", "Libro II — Parte Especial (Contravenciones)", "Libro III — Procedimiento"];
 let filtroLibro = "Todos";
+let filtroSancion = "todas";
+let terminosHighlight = [];
 
+// ---------- Tabs con contador (Opción C) ----------
 const tabsEl = document.getElementById("tabs");
 libros.forEach(l => {
+  const count = l === "Todos" ? datos.length : datos.filter(a => a.libro === l).length;
   const b = document.createElement("button");
   b.type = "button";
   b.className = "tab" + (l === "Todos" ? " activo" : "");
-  b.textContent = l === "Todos" ? "Todos" : l.split("—")[0].trim();
+  b.textContent = l === "Todos" ? `Todos · ${count}` : `${l.split("—")[0].trim()} · ${count}`;
   b.setAttribute("role", "tab");
   b.setAttribute("aria-selected", l === filtroLibro ? "true" : "false");
   b.dataset.libro = l;
@@ -159,10 +186,46 @@ libros.forEach(l => {
     b.classList.add("activo");
     b.setAttribute("aria-selected", "true");
     render();
+    actualizarURL();
   });
   tabsEl.appendChild(b);
 });
 
+// ---------- Filtro por tipo de sanción (Opción A) ----------
+const filtroSancionEl = document.getElementById("filtro-sancion");
+const opcionesSancion = [
+  { id: "todas", label: "Todas" },
+  { id: "multa", label: "Solo multa" },
+  { id: "arresto", label: "Solo arresto" },
+  { id: "ambas", label: "Multa + arresto" }
+];
+opcionesSancion.forEach(o => {
+  const c = document.createElement("button");
+  c.type = "button";
+  c.className = "chip" + (o.id === filtroSancion ? " activo" : "");
+  c.textContent = o.label;
+  c.dataset.sancion = o.id;
+  c.addEventListener("click", () => {
+    filtroSancion = o.id;
+    document.querySelectorAll(".chip").forEach(x => x.classList.remove("activo"));
+    c.classList.add("activo");
+    render();
+    actualizarURL();
+  });
+  filtroSancionEl.appendChild(c);
+});
+
+function detectarSancion(a) {
+  const t = normalizar(a.texto || "");
+  const tieneMulta = t.includes("multa");
+  const tieneArresto = t.includes("arresto");
+  if (tieneMulta && tieneArresto) return "ambas";
+  if (tieneMulta) return "multa";
+  if (tieneArresto) return "arresto";
+  return "otras";
+}
+
+// ---------- Input de búsqueda ----------
 const inputBuscar = document.getElementById("buscar");
 let debounceURL;
 inputBuscar.addEventListener("input", () => {
@@ -172,63 +235,47 @@ inputBuscar.addEventListener("input", () => {
 });
 
 // ---------- Utilidades ----------
-
 function normalizar(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
-
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[c]);
 }
-
 const STOPWORDS = new Set([
   "el","la","los","las","un","una","unos","unas","de","del","al","a",
   "y","o","u","que","en","con","por","para","mi","tu","su","mis","tus","sus",
   "es","son","esta","estan","hay","hace","hacer","hacia","tengo","tiene","tienen",
   "me","te","se","le","les","nos","lo","como","donde","cuando","muy","mas"
 ]);
-
 function distanciaLevenshtein(a, b) {
   if (a === b) return 0;
   if (!a) return b.length;
   if (!b) return a.length;
   const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
-    let anterior = fila[0];
-    fila[0] = i;
+    let anterior = fila[0]; fila[0] = i;
     for (let j = 1; j <= b.length; j++) {
       const actual = fila[j];
-      fila[j] = Math.min(
-        fila[j] + 1,
-        fila[j - 1] + 1,
-        anterior + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, anterior + (a[i - 1] === b[j - 1] ? 0 : 1));
       anterior = actual;
     }
   }
   return fila[b.length];
 }
-
 function coincideConTolerancia(texto, termino) {
   if (!termino) return false;
   if (texto.includes(termino)) return true;
   if (termino.length < 5) return false;
-  const palabrasTexto = texto.split(/\s+/);
-  return palabrasTexto.some(p => {
+  return texto.split(/\s+/).some(p => {
     const limpia = p.replace(/[^a-z0-9]/g, "");
-    return limpia.length >= 5 &&
-      Math.abs(limpia.length - termino.length) <= 1 &&
+    return limpia.length >= 5 && Math.abs(limpia.length - termino.length) <= 1 &&
       distanciaLevenshtein(limpia, termino) <= 1;
   });
 }
 
 // ---------- Consultas inteligentes ----------
-
 const consultasInteligentes = [
   { frases: ["mucho ruido","ruido de noche","ruido nocturno","vecino ruidoso","musica fuerte","musica a todo volumen","molesta el ruido","no me dejan dormir","ruido vecinos","fiesta ruidosa"], palabras: ["ruido","ruidos","molestos","vecinos","descanso","tranquilidad"] },
   { frases: ["me pelee","se pelearon","quiere pelear","provoca pelea","pelea en la calle","pelea en la via publica"], palabras: ["pelea","pelear","provocar","violencia"] },
@@ -251,36 +298,27 @@ const consultasInteligentes = [
   { frases: ["violencia al docente","agredir maestro","agresion en escuela"], palabras: ["escuela","docente","maestro","educativo","8038"] },
   { frases: ["cortar calle","cortar ruta","bloquear calle","bloqueo","piquete"], palabras: ["circulacion","obstaculizar","bloqueo","calle","ruta","8376"] }
 ];
-
 function ampliarConsulta(q) {
   const normalizada = normalizar(q);
   const extras = [];
   consultasInteligentes.forEach(c => {
-    if (c.frases.some(frase => normalizada.includes(normalizar(frase)))) {
-      extras.push(...c.palabras);
-    }
+    if (c.frases.some(f => normalizada.includes(normalizar(f)))) extras.push(...c.palabras);
   });
   return [...new Set(extras.map(normalizar))];
 }
 
 // ---------- Scoring ----------
-
 function umbralInteligente(total) {
   if (total <= 2) return 1;
   if (total <= 5) return 2;
   return Math.ceil(total / 3);
 }
-
-function puntuar(a, terminos, terminosInteligentes) {
+function puntuar(a, terminos, terminosIntel) {
   const palabras = normalizar(a.palabras || "");
-  const explic   = normalizar(a.explicacion || "");
-  const texto    = normalizar(a.texto || "");
-  const num      = normalizar(a.numero || "");
-  const full     = `${num} ${texto} ${explic} ${palabras}`;
-
-  let score = 0;
-  let directosMatch = 0;
-
+  const explic = normalizar(a.explicacion || "");
+  const texto = normalizar(a.texto || "");
+  const full = `${normalizar(a.numero)} ${texto} ${explic} ${palabras}`;
+  let score = 0, directosMatch = 0, intelMatch = 0;
   for (const t of terminos) {
     let peso = 0;
     if (palabras.includes(t)) peso = 4;
@@ -290,60 +328,74 @@ function puntuar(a, terminos, terminosInteligentes) {
     if (peso) directosMatch++;
     score += peso;
   }
-
-  let intelMatch = 0;
-  for (const t of terminosInteligentes) {
+  for (const t of terminosIntel) {
     if (palabras.includes(t)) { score += 5; intelMatch++; }
     else if (explic.includes(t)) { score += 3; intelMatch++; }
     else if (texto.includes(t)) { score += 1; intelMatch++; }
   }
-
   return { score, directosMatch, intelMatch };
 }
 
-// ---------- Render ----------
+// ---------- Resaltado de coincidencias (Opción D) ----------
+function resaltar(texto, terminos) {
+  if (!terminos || !terminos.length) return esc(texto);
+  let out = esc(texto);
+  const orden = [...terminos].filter(t => t.length >= 3).sort((a, b) => b.length - a.length);
+  for (const t of orden) {
+    const rx = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    out = out.replace(rx, "<mark>$1</mark>");
+  }
+  return out;
+}
 
+// ---------- Compartir artículo (Opción B) ----------
+async function compartirArticulo(numero) {
+  const url = `${location.origin}${location.pathname}#art-${numero}`;
+  const titulo = `Artículo ${numero} — Código Contravencional de Salta`;
+  if (navigator.share) {
+    try { await navigator.share({ title: titulo, url }); } catch (e) {}
+  } else {
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("📋 Link copiado al portapapeles");
+    } catch (e) {
+      prompt("Copiá el link:", url);
+    }
+  }
+}
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-compartir");
+  if (btn) compartirArticulo(btn.dataset.num);
+});
+
+// ---------- Render ----------
 function render() {
   const q = inputBuscar.value.trim();
   const consulta = normalizar(q);
-
   let terminos = consulta.split(/\s+/).filter(Boolean);
-  const terminosSinStop = terminos.filter(t => !STOPWORDS.has(t));
-  if (terminosSinStop.length) terminos = terminosSinStop;
-
-  const terminosInteligentes = q ? ampliarConsulta(consulta) : [];
+  const sinStop = terminos.filter(t => !STOPWORDS.has(t));
+  if (sinStop.length) terminos = sinStop;
+  terminosHighlight = q ? terminos : [];
+  const terminosIntel = q ? ampliarConsulta(consulta) : [];
 
   const resultados = [];
-
   for (const a of datos) {
     if (filtroLibro !== "Todos" && a.libro !== filtroLibro) continue;
+    if (filtroSancion !== "todas" && detectarSancion(a) !== filtroSancion) continue;
 
-    if (!q) {
-      resultados.push({ a, score: 0 });
-      continue;
-    }
+    if (!q) { resultados.push({ a, score: 0 }); continue; }
 
-    const { score, directosMatch, intelMatch } = puntuar(a, terminos, terminosInteligentes);
-
+    const { score, directosMatch, intelMatch } = puntuar(a, terminos, terminosIntel);
     const todosDirectos = terminos.length > 0 && directosMatch === terminos.length;
-    const suficienteIntel = terminosInteligentes.length > 0 &&
-      intelMatch >= umbralInteligente(terminosInteligentes.length);
-
-    if (todosDirectos || suficienteIntel) {
-      resultados.push({ a, score });
-    }
+    const suficienteIntel = terminosIntel.length > 0 && intelMatch >= umbralInteligente(terminosIntel.length);
+    if (todosDirectos || suficienteIntel) resultados.push({ a, score });
   }
+  if (q) resultados.sort((x, y) => y.score - x.score);
 
-  if (q) {
-    resultados.sort((x, y) => y.score - x.score);
-  }
-
-  document.getElementById("contador").textContent =
-    `${resultados.length} de ${datos.length} artículos`;
+  document.getElementById("contador").textContent = `${resultados.length} de ${datos.length} artículos`;
 
   const lista = document.getElementById("lista");
   lista.innerHTML = "";
-
   if (resultados.length === 0) {
     const p = document.createElement("p");
     p.className = "sin-resultados";
@@ -363,21 +415,24 @@ function render() {
     }
     const div = document.createElement("div");
     div.className = "articulo";
+    div.id = `art-${a.numero}`;
     div.innerHTML =
+      `<button class="btn-compartir" data-num="${esc(a.numero)}" aria-label="Compartir artículo ${esc(a.numero)}">🔗</button>` +
       `<p class="numero">Artículo ${esc(a.numero)}</p>` +
-      `<p class="texto">${esc(a.texto)}</p>` +
+      `<p class="texto">${resaltar(a.texto, terminosHighlight)}</p>` +
       (a.explicacion
-        ? `<div class="explicacion"><b>En palabras simples:</b> ${esc(a.explicacion)}</div>`
+        ? `<div class="explicacion"><b>En palabras simples:</b> ${resaltar(a.explicacion, terminosHighlight)}</div>`
         : "");
     lista.appendChild(div);
   }
 }
 
 // ---------- Estado en URL ----------
-
 function actualizarURL() {
+  if (location.hash.startsWith("#art-")) return;
   const params = new URLSearchParams();
   if (filtroLibro !== "Todos") params.set("libro", filtroLibro);
+  if (filtroSancion !== "todas") params.set("sancion", filtroSancion);
   const q = inputBuscar.value.trim();
   if (q) params.set("q", q);
   const hash = params.toString();
@@ -387,6 +442,13 @@ function actualizarURL() {
 function leerURL() {
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return;
+  if (raw.startsWith("art-")) {
+    setTimeout(() => {
+      const el = document.getElementById(raw);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return;
+  }
   const params = new URLSearchParams(raw);
   const libro = params.get("libro");
   if (libro && libros.includes(libro)) {
@@ -395,6 +457,13 @@ function leerURL() {
       const activo = t.dataset.libro === libro;
       t.classList.toggle("activo", activo);
       t.setAttribute("aria-selected", activo ? "true" : "false");
+    });
+  }
+  const sancion = params.get("sancion");
+  if (sancion && ["multa","arresto","ambas","todas"].includes(sancion)) {
+    filtroSancion = sancion;
+    document.querySelectorAll(".chip").forEach(c => {
+      c.classList.toggle("activo", c.dataset.sancion === sancion);
     });
   }
   const q = params.get("q");
