@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1c2b3a">
+  <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Contravencional">
 <title>Código Contravencional de Salta | Guía con explicaciones</title>
 <style>
 :root {
@@ -73,10 +79,41 @@ header p { margin: 0; font-size: 0.9rem; opacity: 0.85; max-width: 620px; margin
 .explicacion b { color: var(--acento); }
 .sin-resultados { text-align: center; color: var(--gris); padding: 30px 0; font-size: 0.9rem; }
 footer { text-align: center; font-size: 0.75rem; color: var(--gris); padding: 20px 16px 30px; }
+  header { position: relative; }
+html.dark {
+  --oscuro: #0a1015;
+  --medio: #6b8fae;
+  --acento: #d4a05a;
+  --fondo: #12171d;
+  --card: #1c2229;
+  --texto: #e5e7eb;
+  --gris: #9ca3af;
+  --borde: #2d3742;
+}
+html.dark .explicacion { background: #2a2318; color: #e2c896; }
+html.dark header { background: #050a0f; }
+.btn-tema {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.1); border: none; color: #fff;
+  width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
+}
+.btn-tema:hover { background: rgba(255,255,255,0.2); }
+.btn-top {
+  position: fixed; bottom: 20px; right: 20px;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--oscuro); color: #fff; border: none;
+  cursor: pointer; font-size: 1.2rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  z-index: 10;
+}
+.btn-top.visible { opacity: 1; pointer-events: auto; }
 </style>
 </head>
 <body>
 <header>
+  <button class="btn-tema" id="btn-tema" aria-label="Cambiar tema">🌙</button>
   <p class="eyebrow">PROVINCIA DE SALTA · LEY 7135</p>
   <h1>Código Contravencional</h1>
   <p>Guía de consulta del Código Contravencional con búsqueda por artículo, tema y palabras relacionadas.</p>
@@ -366,6 +403,42 @@ function leerURL() {
 
 leerURL();
 render();
+</script>
+
+<button class="btn-top" id="btn-top" aria-label="Volver arriba">↑</button>
+
+<script>
+// Tema
+const btnTema = document.getElementById("btn-tema");
+function aplicarTema(oscuro) {
+  document.documentElement.classList.toggle("dark", oscuro);
+  btnTema.textContent = oscuro ? "☀️" : "🌙";
+  try { localStorage.setItem("tema", oscuro ? "dark" : "light"); } catch(e){}
+}
+(function initTema() {
+  let g = null;
+  try { g = localStorage.getItem("tema"); } catch(e){}
+  if (g === "dark") aplicarTema(true);
+  else if (g === "light") aplicarTema(false);
+  else aplicarTema(matchMedia("(prefers-color-scheme: dark)").matches);
+})();
+btnTema.addEventListener("click", () => {
+  aplicarTema(!document.documentElement.classList.contains("dark"));
+});
+
+// Scroll to top
+const btnTop = document.getElementById("btn-top");
+window.addEventListener("scroll", () => {
+  btnTop.classList.toggle("visible", window.scrollY > 400);
+}, { passive: true });
+btnTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+// Service Worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
