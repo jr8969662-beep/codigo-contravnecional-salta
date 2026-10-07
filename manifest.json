@@ -1,0 +1,20 @@
+{
+  "name": "Código Contravencional de Salta",
+  "short_name": "Contravencional",
+  "description": "Guía del Código Contravencional de Salta (Ley 7135) con búsqueda inteligente.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c2b3a",
+  "theme_color": "#1c2b3a",
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
