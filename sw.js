@@ -1,10 +1,26 @@
-const CACHE = "contrav-salta-v1";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg"];
+// Cambiá este número cada vez que publiques cambios: así los usuarios
+// que ya tienen la app instalada ven el aviso "Hay una versión nueva".
+const VERSION = "v2";
+const CACHE = `contrav-salta-${VERSION}`;
+const ASSETS = [
+  "./",
+  "./index.html",
+  "./articulos.json",
+  "./manifest.json",
+  "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./icon-maskable-512.png",
+  "./apple-touch-icon.png"
+];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  // No se activa solo: espera a que el usuario toque "Actualizar".
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
@@ -16,15 +32,38 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      const fresh = fetch(e.request).then(resp => {
-        const copy = resp.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;
+
+  // Página y artículos: primero la red (siempre lo más nuevo), si no hay internet usa el caché.
+  const esContenido = req.mode === "navigate" || url.pathname.endsWith(".html") ||
+    url.pathname.endsWith(".json") || url.pathname.endsWith("/");
+  if (esContenido) {
+    e.respondWith(
+      fetch(req).then(resp => {
+        if (resp.ok) {
+          const copia = resp.clone();
+          caches.open(CACHE).then(c => c.put(req, copia));
+        }
         return resp;
-      }).catch(() => cached);
-      return cached || fresh;
-    })
+      }).catch(() =>
+        caches.match(req, { ignoreSearch: true })
+          .then(r => r || (req.mode === "navigate" ? caches.match("./index.html") : undefined))
+      )
+    );
+    return;
+  }
+
+  // Íconos y demás: primero el caché.
+  e.respondWith(
+    caches.match(req).then(cached => cached || fetch(req).then(resp => {
+      if (resp.ok) {
+        const copia = resp.clone();
+        caches.open(CACHE).then(c => c.put(req, copia));
+      }
+      return resp;
+    }))
   );
 });
